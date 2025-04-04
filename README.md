@@ -1,2 +1,2 @@
-# Grafy_w_C
+# Grafy w C
 Będziemy tutaj zamieszczać kod w C, służący do konwersji grafów z formatu .csrrg, generowania grafów, k-dzielności, etc...
