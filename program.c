@@ -3,6 +3,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <time.h>
+#include <limits.h>
 
 #define MAX_LINE_LENGTH 65536
 
@@ -115,6 +116,103 @@ void generate_random_graph(int n, double p, const char *output_filename) {
     printf("Graf zostal pomyslnie wygenerowany (%d wierzcholkow, p=%.2f) do pliku: %s\n", n, p, output_filename);
 }
 
+int calculate_cross_connections(int **matrix, int n, int *groups) {
+    int count = 0;
+    for (int i = 0; i < n; i++) {
+        for (int j = i + 1; j < n; j++) {
+            if (matrix[i][j] && groups[i] != groups[j]) {
+                count++;
+            }
+        }
+    }
+    return count;
+}
+
+void divide_graph_into_groups(int **matrix, int n, FILE *fout) {
+    if (n < 3) {
+        fprintf(fout, "Graf musi miec co najmniej 3 wierzcholki do podzialu.\n");
+        return;
+    }
+
+    int *groups = malloc(n * sizeof(int));
+    int *best_groups = malloc(n * sizeof(int));
+    if (!groups || !best_groups) {
+        fprintf(stderr, "Blad alokacji pamieci dla grup.\n");
+        if (groups) free(groups);
+        if (best_groups) free(best_groups);
+        return;
+    }
+
+    // Initialize with a simple division
+    int group_size = n / 3;
+    for (int i = 0; i < n; i++) {
+        groups[i] = i / group_size;
+        if (groups[i] > 2) groups[i] = 2;
+    }
+
+    memcpy(best_groups, groups, n * sizeof(int));
+    int min_cross_connections = calculate_cross_connections(matrix, n, groups);
+
+    int improved;
+    do {
+        improved = 0;
+        
+        for (int i = 0; i < n; i++) {
+            int original_group = groups[i];
+            int best_group = original_group;
+            int best_score = min_cross_connections;
+            
+            for (int g = 0; g < 3; g++) {
+                if (g == original_group) continue;
+                
+                groups[i] = g;
+                int current_score = calculate_cross_connections(matrix, n, groups);
+                
+                if (current_score < best_score) {
+                    best_score = current_score;
+                    best_group = g;
+                }
+            }
+            
+            groups[i] = best_group;
+            
+            if (best_score < min_cross_connections) {
+                min_cross_connections = best_score;
+                memcpy(best_groups, groups, n * sizeof(int));
+                improved = 1;
+            } else {
+                groups[i] = original_group;
+            }
+        }
+    } while (improved);
+
+    int group_counts[3] = {0};
+    for (int i = 0; i < n; i++) {
+        group_counts[best_groups[i]]++;
+    }
+
+    fprintf(fout, "\nPodzial grafu na 3 grupy:\n");
+    fprintf(fout, "Liczba polaczen miedzy grupami: %d\n", min_cross_connections);
+    fprintf(fout, "Liczba wierzcholkow w grupach: %d, %d, %d\n", 
+            group_counts[0], group_counts[1], group_counts[2]);
+    
+    for (int g = 0; g < 3; g++) {
+        fprintf(fout, "Grupa %d: ", g);
+        int first = 1;
+        for (int i = 0; i < n; i++) {
+            if (best_groups[i] == g) {
+                if (!first) fprintf(fout, ", ");
+                fprintf(fout, "%d", i);
+                first = 0;
+            }
+        }
+        fprintf(fout, "\n");
+    }
+
+    free(groups);
+    free(best_groups);
+}
+
 int main(int argc, char *argv[]) {
     if (argc == 4 && strcmp(argv[1], "generate") == 0) {
         int n = atoi(argv[2]);
@@ -199,6 +297,9 @@ int main(int argc, char *argv[]) {
                 }
             }
         }
+
+        divide_graph_into_groups(matrix, n, fout);
+
         fprintf(fout, "\n--------------------------------\n\n");
 
         free(indices);
