@@ -4,7 +4,7 @@
 #include <ctype.h>
 #include <time.h>
 
-#define MAX_LINE_LENGTH 1024
+#define MAX_LINE_LENGTH 65536
 
 void trim(char *str) {
     size_t len = strlen(str);
