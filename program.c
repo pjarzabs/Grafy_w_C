@@ -267,15 +267,19 @@ int** read_adjacency_matrix(FILE *fin, int *n) {
     return matrix;
 }
 int main(int argc, char *argv[]) {
+    
+    printf("\n  Po wpisaniu %s w linii polecen, podaj nazwe pliku, \n  ktory zawiera polaczenia dzialow firmy w formie grafu,", argv[0]);
+    printf("\n  a nastepnie nazwe pliku wynikowego. Przyklad polecenia:\n  %s oddzialy_firmy.csrrg optymalne.txt\n", argv[0]);
+
     if (argc == 4 && strcmp(argv[1], "generate") == 0) {
         int n = atoi(argv[2]);
         double p = atof(argv[3]);
-        generate_random_graph(n, p, "NowyGraf.txt");
+        generate_random_graph(n, p, "nowy_graf.txt");
         return 0;
     }
 
     if(argc != 3) {
-        fprintf(stderr, "Sposob uzycia: %s input.txt output.txt\n", argv[0]);
+        fprintf(stderr, "\n\n\nBlad! Poprawny sposob uzycia: %s oddzialy_firmy.csrrg optymalne.txt\n", argv[0]);
         return 1;
     }
 
@@ -330,6 +334,8 @@ int main(int argc, char *argv[]) {
     free(matrix);
     fclose(fout);
 
-    printf("Przetworzono graf z pliku %s. Wynik zapisano do %s\n", argv[1], argv[2]);
+    printf("\n\n  Zoptymalizowano polaczenia komunikacyjne poszczegolnych dzialow firmy i zapisano w pliku %s.\n ", argv[2]);
+    printf(" Teraz zarzadzanie Wasza firma bedzie przebiegalo sprawniej. \n  Nie zapomnijcie przypisac osoby nadzorujacej do nowo utworzonych dzialow!\n");
+    
     return 0;
 }
