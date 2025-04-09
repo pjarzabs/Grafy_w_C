@@ -45,7 +45,7 @@ int* parse_int_array(const char *line, int *count) {
 
 void generate_random_graph(int n, double p, const char *output_filename) {
     if (n <= 0) {
-        fprintf(stderr, "Liczba wierzcholkow musi byc dodatnia.\n");
+        fprintf(stderr, "Liczba wierzcholkow (polaczen) musi byc dodatnia.\n");
         return;
     }
     if (p < 0.0 || p > 1.0) {
@@ -88,7 +88,7 @@ void generate_random_graph(int n, double p, const char *output_filename) {
         }
     }
 
-    fprintf(fout, "Macierz s\xC4\x85siedztwa:\n");
+    fprintf(fout, "Macierz s\xC4\x85siedztwa przedstawiajaca dzialy w firmie (rozmieszczenie przestrzenne):\n");
     for (int i = 0; i < n; i++) {
         fprintf(fout, "[");
         for (int j = 0; j < n; j++) {
@@ -98,7 +98,7 @@ void generate_random_graph(int n, double p, const char *output_filename) {
         fprintf(fout, "]\n");
     }
 
-    fprintf(fout, "\nLista polaczen:\n");
+    fprintf(fout, "\nLista polaczen komunikacyjnych miedzy numerami ID poszczegolnych dzialow:\n");
     for (int i = 0; i < n; i++) {
         for (int j = i + 1; j < n; j++) {
             if (matrix[i][j]) {
@@ -130,7 +130,7 @@ int calculate_cross_connections(int **matrix, int n, int *groups) {
 
 void divide_graph_into_groups(int **matrix, int n, FILE *fout) {
     if (n < 3) {
-        fprintf(fout, "Graf musi miec co najmniej 3 wierzcholki do podzialu.\n");
+        fprintf(fout, "Graf musi miec co najmniej 3 dzialy (wierzcholki) do podzialu.\n");
         return;
     }
 
@@ -191,9 +191,9 @@ void divide_graph_into_groups(int **matrix, int n, FILE *fout) {
         group_counts[best_groups[i]]++;
     }
 
-    fprintf(fout, "\nPodzial grafu na 3 grupy:\n");
-    fprintf(fout, "Liczba polaczen miedzy grupami: %d\n", min_cross_connections);
-    fprintf(fout, "Liczba wierzcholkow w grupach: %d, %d, %d\n", 
+    fprintf(fout, "\nPodzial dzialow firmy na 3 glowne grupy:\n");
+    fprintf(fout, "Liczba polaczen komunikacyjnych miedzy grupami: %d\n", min_cross_connections);
+    fprintf(fout, "Liczba dzialow w grupach: %d, %d, %d\n", 
             group_counts[0], group_counts[1], group_counts[2]);
     
     for (int g = 0; g < 3; g++) {
