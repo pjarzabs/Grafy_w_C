@@ -213,6 +213,59 @@ void divide_graph_into_groups(int **matrix, int n, FILE *fout) {
     free(best_groups);
 }
 
+int** read_adjacency_matrix(FILE *fin, int *n) {
+    char line[MAX_LINE_LENGTH];
+    int **matrix = NULL;
+    *n = 0;
+
+    // Pomijamy nagłówek "Macierz sąsiedztwa:"
+    while (fgets(line, MAX_LINE_LENGTH, fin)) {
+        if (strstr(line, "Macierz s")) {
+            break;
+        }
+    }
+
+    // Odczytujemy wiersze macierzy
+    int row = 0;
+    while (fgets(line, MAX_LINE_LENGTH, fin)) {
+        trim(line);
+        if (line[0] != '[') break; // Koniec macierzy
+
+        // Pierwszy wiersz - alokacja pamięci
+        if (*n == 0) {
+            // Liczymy liczbę kolumn (liczbę liczb w wierszu)
+            char *temp = strdup_local(line);
+            char *token = strtok(temp, " []."); // Separatory: spacja, [, ], .
+            int count = 0;
+            while (token != NULL) {
+                count++;
+                token = strtok(NULL, " [].");
+            }
+            free(temp);
+            *n = count;
+
+            // Alokacja macierzy n x n
+            matrix = malloc(*n * sizeof(int*));
+            for (int i = 0; i < *n; i++) {
+                matrix[i] = calloc(*n, sizeof(int));
+            }
+        }
+
+        // Parsowanie wiersza
+        char *temp = strdup_local(line);
+        char *token = strtok(temp, " [].");
+        int col = 0;
+        while (token != NULL && col < *n) {
+            matrix[row][col] = (atoi(token) != 0) ? 1 : 0; // Konwersja na 0/1
+            col++;
+            token = strtok(NULL, " [].");
+        }
+        free(temp);
+        row++;
+    }
+
+    return matrix;
+}
 int main(int argc, char *argv[]) {
     if (argc == 4 && strcmp(argv[1], "generate") == 0) {
         int n = atoi(argv[2]);
@@ -222,7 +275,7 @@ int main(int argc, char *argv[]) {
     }
 
     if(argc != 3) {
-        fprintf(stderr, "Sposob uzycia: %s input.csrrg output.txt\n", argv[0]);
+        fprintf(stderr, "Sposob uzycia: %s input.txt output.txt\n", argv[0]);
         return 1;
     }
 
@@ -239,80 +292,44 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    char line[MAX_LINE_LENGTH];
-    int graphCount = 0;
+    int n;
+    int **matrix = read_adjacency_matrix(fin, &n);
+    fclose(fin);
 
-    while(1) {
-        char line1[MAX_LINE_LENGTH], line2[MAX_LINE_LENGTH], line3[MAX_LINE_LENGTH];
-        char line4[MAX_LINE_LENGTH], line5[MAX_LINE_LENGTH];
-
-        if(fgets(line1, MAX_LINE_LENGTH, fin) == NULL) break;
-        if(fgets(line2, MAX_LINE_LENGTH, fin) == NULL) break;
-        if(fgets(line3, MAX_LINE_LENGTH, fin) == NULL) break;
-        if(fgets(line4, MAX_LINE_LENGTH, fin) == NULL) break;
-        if(fgets(line5, MAX_LINE_LENGTH, fin) == NULL) break;
-
-        trim(line1); trim(line2); trim(line3); trim(line4); trim(line5);
-
-        int max_nodes = atoi(line1);
-
-        int countIndices;
-        int *indices = parse_int_array(line2, &countIndices);
-
-        int countRowPtr;
-        int *rowPtr = parse_int_array(line3, &countRowPtr);
-        int n = countRowPtr - 1;
-
-        int **matrix = malloc(n * sizeof(int*));
-        for(int i = 0; i < n; i++) {
-            matrix[i] = calloc(n, sizeof(int));
-        }
-
-        for (int i = 0; i < n; i++) {
-            for (int j = rowPtr[i]; j < rowPtr[i+1]; j++) {
-                int col = indices[j];
-                if(col < 0 || col >= n) {
-                    fprintf(stderr, "Ostrzezenie: indeks kolumny %d poza zakresem dla wiersza %d (n=%d). Pomijam.\n", col, i, n);
-                    continue;
-                }
-                matrix[i][col] = 1;
-            }
-        }
-
-        fprintf(fout, "Graf %d:\n", ++graphCount);
-        fprintf(fout, "Macierz s\xC4\x85siedztwa:\n");
-        for (int i = 0; i < n; i++) {
-            fprintf(fout, "[");
-            for (int j = 0; j < n; j++) {
-                fprintf(fout, "%d.", matrix[i][j]);
-                if(j < n - 1) fprintf(fout, " ");
-            }
-            fprintf(fout, "]\n");
-        }
-        fprintf(fout, "\nLista polaczen:\n");
-        for (int i = 0; i < n; i++) {
-            for (int j = i + 1; j < n; j++) {
-                if(matrix[i][j] == 1) {
-                    fprintf(fout, "%d - %d\n", i, j);
-                }
-            }
-        }
-
-        divide_graph_into_groups(matrix, n, fout);
-
-        fprintf(fout, "\n--------------------------------\n\n");
-
-        free(indices);
-        free(rowPtr);
-        for (int i = 0; i < n; i++) {
-            free(matrix[i]);
-        }
-        free(matrix);
+    if (matrix == NULL) {
+        fprintf(stderr, "Blad odczytu macierzy sasiedztwa z pliku.\n");
+        fclose(fout);
+        return 1;
     }
 
-    fclose(fin);
+    fprintf(fout, "Graf:\n");
+    fprintf(fout, "Macierz s\xC4\x85siedztwa:\n");
+    for (int i = 0; i < n; i++) {
+        fprintf(fout, "[");
+        for (int j = 0; j < n; j++) {
+            fprintf(fout, "%d.", matrix[i][j]);
+            if(j < n - 1) fprintf(fout, " ");
+        }
+        fprintf(fout, "]\n");
+    }
+
+    fprintf(fout, "\nLista polaczen:\n");
+    for (int i = 0; i < n; i++) {
+        for (int j = i + 1; j < n; j++) {
+            if(matrix[i][j] == 1) {
+                fprintf(fout, "%d - %d\n", i, j);
+            }
+        }
+    }
+
+    divide_graph_into_groups(matrix, n, fout);
+
+    for (int i = 0; i < n; i++) {
+        free(matrix[i]);
+    }
+    free(matrix);
     fclose(fout);
 
-    printf("Konwersja zakonczona. Przetworzono %d graf(ow).\n", graphCount);
+    printf("Przetworzono graf z pliku %s. Wynik zapisano do %s\n", argv[1], argv[2]);
     return 0;
 }
