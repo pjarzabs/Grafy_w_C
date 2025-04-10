@@ -1,20 +1,40 @@
-    #include <stdio.h>
-    #include <stdlib.h>
-    #include <string.h>
-    #include <ctype.h>
-    #include <time.h>
-    #include <limits.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
+#include <time.h>
+#include <limits.h>
 
-    #define MAX_LINE_LENGTH 65536
+#define MAX_LINE_LENGTH 65536
 
-    void trim(char *str) {
-        size_t len = strlen(str);
-        while(len > 0 && (str[len-1]=='\n' || str[len-1]=='\r' || isspace(str[len-1]))) {
-            str[len-1] = '\0';
-            len--;
+void trim(char *str) {
+    size_t len = strlen(str);
+    while(len > 0 && (str[len-1]=='\n' || str[len-1]=='\r' || isspace(str[len-1]))) {
+        str[len-1] = '\0';
+        len--;
+    }
+}
+
+char *strdup_local(const char *s) {
+    size_t len = strlen(s) + 1;
+    char *copy = malloc(len);
+    if (copy) {
+        memcpy(copy, s, len);
+    }
+    return copy;
+}
+
+int* parse_int_array(const char *line, int *count) {
+    int capacity = 10;
+    int *array = malloc(capacity * sizeof(int));
+    *count = 0;
+    char *temp = strdup_local(line);
+    char *token = strtok(temp, " ;\t\r\n");
+    while(token != NULL) {
+        if(*count >= capacity) {
+            capacity *= 2;
+            array = realloc(array, capacity * sizeof(int));
         }
-<<<<<<< HEAD
-=======
         array[*count] = atoi(token);
         (*count)++;
         token = strtok(NULL, " ;\t\r\n");
@@ -31,62 +51,32 @@ void generate_random_graph(int n, double p, const char *output_filename) {
     if (p < 0.0 || p > 1.0) {
         fprintf(stderr, "Prawdopodobienstwo musi miescic sie w przedziale [0.0, 1.0].\n");
         return;
->>>>>>> 0432d1b107750a2d3fb18cd4a9347c37473152b6
     }
 
-    char *strdup_local(const char *s) {
-        size_t len = strlen(s) + 1;
-        char *copy = malloc(len);
-        if (copy) {
-            memcpy(copy, s, len);
-        }
-        return copy;
+    FILE *fout = fopen(output_filename, "w");
+    if (!fout) {
+        fprintf(stderr, "Blad: Nie mozna otworzyc pliku do zapisu: %s\n", output_filename);
+        return;
     }
 
-    int* parse_int_array(const char *line, int *count) {
-        int capacity = 10;
-        int *array = malloc(capacity * sizeof(int));
-        *count = 0;
-        char *temp = strdup_local(line);
-        char *token = strtok(temp, " ;\t\r\n");
-        while(token != NULL) {
-            if(*count >= capacity) {
-                capacity *= 2;
-                array = realloc(array, capacity * sizeof(int));
-            }
-            array[*count] = atoi(token);
-            (*count)++;
-            token = strtok(NULL, " ;\t\r\n");
-        }
-        free(temp);
-        return array;
+    int **matrix = malloc(n * sizeof(int*));
+    if (!matrix) {
+        fprintf(stderr, "Blad alokacji pamieci dla wierszy macierzy.\n");
+        fclose(fout);
+        return;
     }
 
-    void generate_random_graph(int n, double p, const char *output_filename) {
-        if (n <= 0) {
-            fprintf(stderr, "Liczba wierzcholkow (polaczen) musi byc dodatnia.\n");
-            return;
-        }
-        if (p < 0.0 || p > 1.0) {
-            fprintf(stderr, "Prawdopodobienstwo musi miescic sie w przedziale [0.0, 1.0].\n");
-            return;
-        }
-
-        FILE *fout = fopen(output_filename, "w");
-        if (!fout) {
-            fprintf(stderr, "Blad: Nie mozna otworzyc pliku do zapisu: %s\n", output_filename);
-            return;
-        }
-
-        int **matrix = malloc(n * sizeof(int*));
-        if (!matrix) {
-            fprintf(stderr, "Blad alokacji pamieci dla wierszy macierzy.\n");
+    for (int i = 0; i < n; i++) {
+        matrix[i] = calloc(n, sizeof(int));
+        if (!matrix[i]) {
+            fprintf(stderr, "Blad alokacji pamieci dla kolumn macierzy (wiersz %d).\n", i);
+            for (int j = 0; j < i; j++) free(matrix[j]);
+            free(matrix);
             fclose(fout);
             return;
         }
+    }
 
-<<<<<<< HEAD
-=======
     srand((unsigned)time(NULL));
 
     for (int i = 0; i < n; i++) {
@@ -137,274 +127,112 @@ int calculate_cross_connections(int **matrix, int n, int *groups) {
     }
     return count;
 }
-
-void divide_graph_into_groups(int **matrix, int n, FILE *fout) {
+void divide_into_balanced_groups(int **matrix, int n, FILE *fout) {
     if (n < 3) {
-        fprintf(fout, "Graf musi miec co najmniej 3 dzialy (wierzcholki) do podzialu.\n");
+        fprintf(fout, "Za mało wierzchołków (min. 3).\n");
         return;
     }
 
     int *groups = malloc(n * sizeof(int));
     int *best_groups = malloc(n * sizeof(int));
-    if (!groups || !best_groups) {
-        fprintf(stderr, "Blad alokacji pamieci dla grup.\n");
-        if (groups) free(groups);
-        if (best_groups) free(best_groups);
-        return;
-    }
+    int min_cross = INT_MAX;
 
-    // Initialize with a simple division
-    int group_size = n / 3;
+    // Inicjalizacja (równoważony podział)
     for (int i = 0; i < n; i++) {
-        groups[i] = i / group_size;
-        if (groups[i] > 2) groups[i] = 2;
+        groups[i] = i % 3;  // Każda grupa ma przynajmniej floor(n/3) wierzchołków
     }
 
-    memcpy(best_groups, groups, n * sizeof(int));
-    int min_cross_connections = calculate_cross_connections(matrix, n, groups);
-
+    // Optymalizacja (algorytm zachłanny z ograniczeniami)
     int improved;
     do {
         improved = 0;
-        
->>>>>>> 0432d1b107750a2d3fb18cd4a9347c37473152b6
         for (int i = 0; i < n; i++) {
-            matrix[i] = calloc(n, sizeof(int));
-            if (!matrix[i]) {
-                fprintf(stderr, "Blad alokacji pamieci dla kolumn macierzy (wiersz %d).\n", i);
-                for (int j = 0; j < i; j++) free(matrix[j]);
-                free(matrix);
-                fclose(fout);
-                return;
-            }
-        }
+            int original_group = groups[i];
+            for (int g = 0; g < 3; g++) {
+                if (g == original_group) continue;
 
-        srand((unsigned)time(NULL));
+                // Sprawdź, czy przeniesienie nie zaburzy równowagi
+                int new_group_sizes[3] = {0};
+                for (int j = 0; j < n; j++) {
+                    int group = (j == i) ? g : groups[j];
+                    new_group_sizes[group]++;
+                }
 
-        for (int i = 0; i < n; i++) {
-            for (int j = i + 1; j < n; j++) {
-                if ((double)rand() / RAND_MAX < p) {
-                    matrix[i][j] = 1;
-                    matrix[j][i] = 1;
+                // Dopuszczalna nierównowaga: ±1 wierzchołek
+                int max_size = (n + 2) / 3;  // ceil(n/3)
+                int min_size = n / 3;         // floor(n/3)
+                if (new_group_sizes[g] > max_size || new_group_sizes[original_group] < min_size)
+                    continue;
+
+                groups[i] = g;
+                int current_cross = calculate_cross_connections(matrix, n, groups);
+
+                if (current_cross < min_cross) {
+                    min_cross = current_cross;
+                    memcpy(best_groups, groups, n * sizeof(int));
+                    improved = 1;
+                } else {
+                    groups[i] = original_group;
                 }
             }
-        }
-
-        fprintf(fout, "Macierz s\xC4\x85siedztwa przedstawiajaca dzialy w firmie (rozmieszczenie przestrzenne):\n");
-        for (int i = 0; i < n; i++) {
-            fprintf(fout, "[");
-            for (int j = 0; j < n; j++) {
-                fprintf(fout, "%d.", matrix[i][j]);
-                if (j < n - 1) fprintf(fout, " ");
-            }
-            fprintf(fout, "]\n");
-        }
-
-        fprintf(fout, "\nLista polaczen komunikacyjnych miedzy numerami ID poszczegolnych dzialow:\n");
-        for (int i = 0; i < n; i++) {
-            for (int j = i + 1; j < n; j++) {
-                if (matrix[i][j]) {
-                    fprintf(fout, "%d - %d\n", i, j);
-                }
-            }
-        }
-
-        for (int i = 0; i < n; i++) {
-            free(matrix[i]);
-        }
-        free(matrix);
-        fclose(fout);
-
-        printf("Graf zostal pomyslnie wygenerowany (%d wierzcholkow, p=%.2f) do pliku: %s\n", n, p, output_filename);
-    }
-
-    int calculate_cross_connections(int **matrix, int n, int *groups) {
-        int count = 0;
-        for (int i = 0; i < n; i++) {
-            for (int j = i + 1; j < n; j++) {
-                if (matrix[i][j] && groups[i] != groups[j]) {
-                    count++;
-                }
-            }
-        }
-        return count;
-    }
-
-    void divide_graph_into_groups(int **matrix, int n, FILE *fout) {
-        if (n < 3) {
-            fprintf(fout, "Graf musi miec co najmniej 3 wierzcholki.\n");
-            return;
-        }
-    
-        int *groups = malloc(n * sizeof(int));
-        int *best_groups = malloc(n * sizeof(int));
-        
-        // Inicjalizacja (każda grupa ma przynajmniej 1 wierzchołek)
-        for (int i = 0; i < n; i++) {
-            groups[i] = i % 3;
-        }
-    
-        int max_cross = calculate_cross_connections(matrix, n, groups);
-        memcpy(best_groups, groups, n * sizeof(int));
-    
-        // Optymalizacja
-        int improved;
-        do {
-            improved = 0;
-            for (int i = 0; i < n; i++) {
-                int original_group = groups[i];
-                for (int g = 0; g < 3; g++) {
-                    if (g == original_group) continue;
-                    
-                    groups[i] = g;
-                    int current_cross = calculate_cross_connections(matrix, n, groups);
-                    
-                    if (current_cross > max_cross) {
-                        max_cross = current_cross;
-                        memcpy(best_groups, groups, n * sizeof(int));
-                        improved = 1;
-                    }
-                }
-                groups[i] = original_group;
-            }
-<<<<<<< HEAD
-        } while (improved);
-=======
         }
     } while (improved);
 
-    int group_counts[3] = {0};
-    for (int i = 0; i < n; i++) {
-        group_counts[best_groups[i]]++;
+    // Wynik
+    fprintf(fout, "\nPodział na 3 grupy (minimalizacja połączeń międzygrupowych):\n");
+    fprintf(fout, "Liczba połączeń między grupami: %d\n", min_cross);
+
+    int counts[3] = {0};
+    for (int i = 0; i < n; i++) counts[best_groups[i]]++;
+    fprintf(fout, "Liczba wierzchołków w grupach: %d, %d, %d\n", counts[0], counts[1], counts[2]);
+
+    for (int g = 0; g < 3; g++) {
+        fprintf(fout, "Grupa %d: ", g);
+        for (int i = 0; i < n; i++) {
+            if (best_groups[i] == g) fprintf(fout, "%d ", i);
+        }
+        fprintf(fout, "\n");
     }
 
-    fprintf(fout, "\nPodzial dzialow firmy na 3 glowne grupy:\n");
-    fprintf(fout, "Liczba polaczen komunikacyjnych miedzy grupami: %d\n", min_cross_connections);
-    fprintf(fout, "Liczba dzialow w grupach: %d, %d, %d\n", 
-            group_counts[0], group_counts[1], group_counts[2]);
->>>>>>> 0432d1b107750a2d3fb18cd4a9347c37473152b6
+    free(groups);
+    free(best_groups);
+}
+int** read_adjacency_matrix(FILE *fin, int *n) {
+    // Skip first line (50)
+    char line[MAX_LINE_LENGTH];
+    fgets(line, MAX_LINE_LENGTH, fin);
     
-        // Wymuszenie 3 grup (jeśli któraś jest pusta)
-        int counts[3] = {0};
-        for (int i = 0; i < n; i++) counts[best_groups[i]]++;
-        
-        if (counts[0] == 0 || counts[1] == 0 || counts[2] == 0) {
-            // Przenieś wierzchołek z największej grupy do pustej
-            int empty_group = (counts[0] == 0) ? 0 : (counts[1] == 0) ? 1 : 2;
-            int largest_group = (counts[0] > counts[1]) ? 0 : 1;
-            largest_group = (counts[largest_group] > counts[2]) ? largest_group : 2;
-            
-            for (int i = 0; i < n; i++) {
-                if (best_groups[i] == largest_group) {
-                    best_groups[i] = empty_group;
-                    break;
-                }
-            }
-            max_cross = calculate_cross_connections(matrix, n, best_groups);
-        }
+    // Read edges list
+    fgets(line, MAX_LINE_LENGTH, fin);
+    int edge_count;
+    int *edges = parse_int_array(line, &edge_count);
     
-        // Zapisz wynik
-        fprintf(fout, "\nPodzial na 3 grupy (maksymalizacja polaczen międzygrupowych):\n");
-        fprintf(fout, "Liczba polaczen międzygrupowych: %d\n", max_cross);
-        
-        int final_counts[3] = {0};
-        for (int i = 0; i < n; i++) final_counts[best_groups[i]]++;
-        
-        fprintf(fout, "Rozmiary grup: %d, %d, %d\n", final_counts[0], final_counts[1], final_counts[2]);
-        
-        for (int g = 0; g < 3; g++) {
-            fprintf(fout, "Grupa %d: ", g);
-            int first = 1;
-            for (int i = 0; i < n; i++) {
-                if (best_groups[i] == g) {
-                    if (!first) fprintf(fout, ", ");
-                    fprintf(fout, "%d", i);
-                    first = 0;
-                }
-            }
-            fprintf(fout, "\n");
-        }
+    // Read indices
+    fgets(line, MAX_LINE_LENGTH, fin);
+    int index_count;
+    int *indices = parse_int_array(line, &index_count);
     
-        free(groups);
-        free(best_groups);
+    // Determine number of vertices (n)
+    *n = indices[index_count-1] / 2; // Rough estimate
+    
+    // Create empty matrix
+    int **matrix = malloc(*n * sizeof(int*));
+    for(int i = 0; i < *n; i++) {
+        matrix[i] = calloc(*n, sizeof(int));
     }
-    int** read_adjacency_matrix(FILE *fin, int *n) {
-        char line[MAX_LINE_LENGTH];
-        int **matrix = NULL;
-        *n = 0;
-
-        // Pomijamy nagłówek "Macierz sąsiedztwa:"
-        while (fgets(line, MAX_LINE_LENGTH, fin)) {
-            if (strstr(line, "Macierz s")) {
-                break;
-            }
+    
+    // Populate matrix from edges
+    for(int i = 0; i < edge_count; i++) {
+        int v1 = edges[i] / *n;
+        int v2 = edges[i] % *n;
+        if(v1 < *n && v2 < *n) {
+            matrix[v1][v2] = 1;
+            matrix[v2][v1] = 1;
         }
-
-        // Odczytujemy wiersze macierzy
-        int row = 0;
-        while (fgets(line, MAX_LINE_LENGTH, fin)) {
-            trim(line);
-            if (line[0] != '[') break; // Koniec macierzy
-
-            // Pierwszy wiersz - alokacja pamięci
-            if (*n == 0) {
-                // Liczymy liczbę kolumn (liczbę liczb w wierszu)
-                char *temp = strdup_local(line);
-                char *token = strtok(temp, " []."); // Separatory: spacja, [, ], .
-                int count = 0;
-                while (token != NULL) {
-                    count++;
-                    token = strtok(NULL, " [].");
-                }
-                free(temp);
-                *n = count;
-
-                // Alokacja macierzy n x n
-                matrix = malloc(*n * sizeof(int*));
-                for (int i = 0; i < *n; i++) {
-                    matrix[i] = calloc(*n, sizeof(int));
-                }
-            }
-
-            // Parsowanie wiersza
-            char *temp = strdup_local(line);
-            char *token = strtok(temp, " [].");
-            int col = 0;
-            while (token != NULL && col < *n) {
-                matrix[row][col] = (atoi(token) != 0) ? 1 : 0; // Konwersja na 0/1
-                col++;
-                token = strtok(NULL, " [].");
-            }
-            free(temp);
-            row++;
-        }
-
-        return matrix;
     }
-    int main(int argc, char *argv[]) {
-        
-        printf("\n  Po wpisaniu %s w linii polecen, podaj nazwe pliku, \n  ktory zawiera polaczenia dzialow firmy w formie grafu,", argv[0]);
-        printf("\n  a nastepnie nazwe pliku wynikowego. Przyklad polecenia:\n  %s oddzialy_firmy.csrrg optymalne.txt\n", argv[0]);
-
-        if (argc == 4 && strcmp(argv[1], "generate") == 0) {
-            int n = atoi(argv[2]);
-            double p = atof(argv[3]);
-            generate_random_graph(n, p, "nowy_graf.txt");
-            return 0;
-        }
-
-<<<<<<< HEAD
-        if(argc != 3) {
-            fprintf(stderr, "\n\n\nBlad! Poprawny sposob uzycia: %s oddzialy_firmy.csrrg optymalne.txt\n", argv[0]);
-            return 1;
-        }
-
-        FILE *fin = fopen(argv[1], "r");
-        if(!fin) {
-            fprintf(stderr, "Blad otwarcia pliku wejsciowego: %s\n", argv[1]);
-            return 1;
-        }
-=======
+    
+    free(edges);
+    free(indices);
     return matrix;
 }
 int main(int argc, char *argv[]) {
@@ -423,63 +251,60 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "\n\n\nBlad! Poprawny sposob uzycia: %s oddzialy_firmy.csrrg optymalne.txt\n", argv[0]);
         return 1;
     }
->>>>>>> 0432d1b107750a2d3fb18cd4a9347c37473152b6
 
-        FILE *fout = fopen(argv[2], "w");
-        if(!fout) {
-            fprintf(stderr, "Blad otwarcia pliku wyjsciowego: %s\n", argv[2]);
-            fclose(fin);
-            return 1;
-        }
-
-        int n;
-        int **matrix = read_adjacency_matrix(fin, &n);
-        fclose(fin);
-
-        if (matrix == NULL) {
-            fprintf(stderr, "Blad odczytu macierzy sasiedztwa z pliku.\n");
-            fclose(fout);
-            return 1;
-        }
-
-        fprintf(fout, "Graf:\n");
-        fprintf(fout, "Macierz s\xC4\x85siedztwa:\n");
-        for (int i = 0; i < n; i++) {
-            fprintf(fout, "[");
-            for (int j = 0; j < n; j++) {
-                fprintf(fout, "%d.", matrix[i][j]);
-                if(j < n - 1) fprintf(fout, " ");
-            }
-            fprintf(fout, "]\n");
-        }
-
-        fprintf(fout, "\nLista polaczen:\n");
-        for (int i = 0; i < n; i++) {
-            for (int j = i + 1; j < n; j++) {
-                if(matrix[i][j] == 1) {
-                    fprintf(fout, "%d - %d\n", i, j);
-                }
-            }
-        }
-
-        divide_graph_into_groups(matrix, n, fout);
-
-        for (int i = 0; i < n; i++) {
-            free(matrix[i]);
-        }
-        free(matrix);
-        fclose(fout);
-
-<<<<<<< HEAD
-        printf("\n\n  Zoptymalizowano polaczenia komunikacyjne poszczegolnych dzialow firmy i zapisano w pliku %s.\n ", argv[2]);
-        printf(" Teraz zarzadzanie Wasza firma bedzie przebiegalo sprawniej. \n  Nie zapomnijcie przypisac osoby nadzorujacej do nowo utworzonych dzialow!\n");
-        
-        return 0;
+    FILE *fin = fopen(argv[1], "r");
+    if(!fin) {
+        fprintf(stderr, "Blad otwarcia pliku wejsciowego: %s\n", argv[1]);
+        return 1;
     }
-=======
+
+    FILE *fout = fopen(argv[2], "w");
+    if(!fout) {
+        fprintf(stderr, "Blad otwarcia pliku wyjsciowego: %s\n", argv[2]);
+        fclose(fin);
+        return 1;
+    }
+
+    int n;
+    int **matrix = read_adjacency_matrix(fin, &n);
+    fclose(fin);
+
+    if (matrix == NULL) {
+        fprintf(stderr, "Blad odczytu macierzy sasiedztwa z pliku.\n");
+        fclose(fout);
+        return 1;
+    }
+
+    fprintf(fout, "Graf:\n");
+    fprintf(fout, "Macierz s\xC4\x85siedztwa:\n");
+    for (int i = 0; i < n; i++) {
+        fprintf(fout, "[");
+        for (int j = 0; j < n; j++) {
+            fprintf(fout, "%d.", matrix[i][j]);
+            if(j < n - 1) fprintf(fout, " ");
+        }
+        fprintf(fout, "]\n");
+    }
+
+    fprintf(fout, "\nLista polaczen:\n");
+    for (int i = 0; i < n; i++) {
+        for (int j = i + 1; j < n; j++) {
+            if(matrix[i][j] == 1) {
+                fprintf(fout, "%d - %d\n", i, j);
+            }
+        }
+    }
+
+    divide_into_balanced_groups(matrix, n, fout);
+
+    for (int i = 0; i < n; i++) {
+        free(matrix[i]);
+    }
+    free(matrix);
+    fclose(fout);
+
     printf("\n\n  Zoptymalizowano polaczenia komunikacyjne poszczegolnych dzialow firmy i zapisano w pliku %s.\n ", argv[2]);
     printf(" Teraz zarzadzanie Wasza firma bedzie przebiegalo sprawniej. \n  Nie zapomnijcie przypisac osoby nadzorujacej do nowo utworzonych dzialow!\n");
     
     return 0;
 }
->>>>>>> 0432d1b107750a2d3fb18cd4a9347c37473152b6
