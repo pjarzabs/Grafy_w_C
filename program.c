@@ -13,6 +13,25 @@
             str[len-1] = '\0';
             len--;
         }
+<<<<<<< HEAD
+=======
+        array[*count] = atoi(token);
+        (*count)++;
+        token = strtok(NULL, " ;\t\r\n");
+    }
+    free(temp);
+    return array;
+}
+
+void generate_random_graph(int n, double p, const char *output_filename) {
+    if (n <= 0) {
+        fprintf(stderr, "Liczba wierzcholkow (polaczen) musi byc dodatnia.\n");
+        return;
+    }
+    if (p < 0.0 || p > 1.0) {
+        fprintf(stderr, "Prawdopodobienstwo musi miescic sie w przedziale [0.0, 1.0].\n");
+        return;
+>>>>>>> 0432d1b107750a2d3fb18cd4a9347c37473152b6
     }
 
     char *strdup_local(const char *s) {
@@ -66,6 +85,89 @@
             return;
         }
 
+<<<<<<< HEAD
+=======
+    srand((unsigned)time(NULL));
+
+    for (int i = 0; i < n; i++) {
+        for (int j = i + 1; j < n; j++) {
+            if ((double)rand() / RAND_MAX < p) {
+                matrix[i][j] = 1;
+                matrix[j][i] = 1;
+            }
+        }
+    }
+
+    fprintf(fout, "Macierz s\xC4\x85siedztwa przedstawiajaca dzialy w firmie (rozmieszczenie przestrzenne):\n");
+    for (int i = 0; i < n; i++) {
+        fprintf(fout, "[");
+        for (int j = 0; j < n; j++) {
+            fprintf(fout, "%d.", matrix[i][j]);
+            if (j < n - 1) fprintf(fout, " ");
+        }
+        fprintf(fout, "]\n");
+    }
+
+    fprintf(fout, "\nLista polaczen komunikacyjnych miedzy numerami ID poszczegolnych dzialow:\n");
+    for (int i = 0; i < n; i++) {
+        for (int j = i + 1; j < n; j++) {
+            if (matrix[i][j]) {
+                fprintf(fout, "%d - %d\n", i, j);
+            }
+        }
+    }
+
+    for (int i = 0; i < n; i++) {
+        free(matrix[i]);
+    }
+    free(matrix);
+    fclose(fout);
+
+    printf("Graf zostal pomyslnie wygenerowany (%d wierzcholkow, p=%.2f) do pliku: %s\n", n, p, output_filename);
+}
+
+int calculate_cross_connections(int **matrix, int n, int *groups) {
+    int count = 0;
+    for (int i = 0; i < n; i++) {
+        for (int j = i + 1; j < n; j++) {
+            if (matrix[i][j] && groups[i] != groups[j]) {
+                count++;
+            }
+        }
+    }
+    return count;
+}
+
+void divide_graph_into_groups(int **matrix, int n, FILE *fout) {
+    if (n < 3) {
+        fprintf(fout, "Graf musi miec co najmniej 3 dzialy (wierzcholki) do podzialu.\n");
+        return;
+    }
+
+    int *groups = malloc(n * sizeof(int));
+    int *best_groups = malloc(n * sizeof(int));
+    if (!groups || !best_groups) {
+        fprintf(stderr, "Blad alokacji pamieci dla grup.\n");
+        if (groups) free(groups);
+        if (best_groups) free(best_groups);
+        return;
+    }
+
+    // Initialize with a simple division
+    int group_size = n / 3;
+    for (int i = 0; i < n; i++) {
+        groups[i] = i / group_size;
+        if (groups[i] > 2) groups[i] = 2;
+    }
+
+    memcpy(best_groups, groups, n * sizeof(int));
+    int min_cross_connections = calculate_cross_connections(matrix, n, groups);
+
+    int improved;
+    do {
+        improved = 0;
+        
+>>>>>>> 0432d1b107750a2d3fb18cd4a9347c37473152b6
         for (int i = 0; i < n; i++) {
             matrix[i] = calloc(n, sizeof(int));
             if (!matrix[i]) {
@@ -165,7 +267,22 @@
                 }
                 groups[i] = original_group;
             }
+<<<<<<< HEAD
         } while (improved);
+=======
+        }
+    } while (improved);
+
+    int group_counts[3] = {0};
+    for (int i = 0; i < n; i++) {
+        group_counts[best_groups[i]]++;
+    }
+
+    fprintf(fout, "\nPodzial dzialow firmy na 3 glowne grupy:\n");
+    fprintf(fout, "Liczba polaczen komunikacyjnych miedzy grupami: %d\n", min_cross_connections);
+    fprintf(fout, "Liczba dzialow w grupach: %d, %d, %d\n", 
+            group_counts[0], group_counts[1], group_counts[2]);
+>>>>>>> 0432d1b107750a2d3fb18cd4a9347c37473152b6
     
         // Wymuszenie 3 grup (jeśli któraś jest pusta)
         int counts[3] = {0};
@@ -276,6 +393,7 @@
             return 0;
         }
 
+<<<<<<< HEAD
         if(argc != 3) {
             fprintf(stderr, "\n\n\nBlad! Poprawny sposob uzycia: %s oddzialy_firmy.csrrg optymalne.txt\n", argv[0]);
             return 1;
@@ -286,6 +404,26 @@
             fprintf(stderr, "Blad otwarcia pliku wejsciowego: %s\n", argv[1]);
             return 1;
         }
+=======
+    return matrix;
+}
+int main(int argc, char *argv[]) {
+    
+    printf("\n  Po wpisaniu %s w linii polecen, podaj nazwe pliku, \n  ktory zawiera polaczenia dzialow firmy w formie grafu,", argv[0]);
+    printf("\n  a nastepnie nazwe pliku wynikowego. Przyklad polecenia:\n  %s oddzialy_firmy.csrrg optymalne.txt\n", argv[0]);
+
+    if (argc == 4 && strcmp(argv[1], "generate") == 0) {
+        int n = atoi(argv[2]);
+        double p = atof(argv[3]);
+        generate_random_graph(n, p, "nowy_graf.txt");
+        return 0;
+    }
+
+    if(argc != 3) {
+        fprintf(stderr, "\n\n\nBlad! Poprawny sposob uzycia: %s oddzialy_firmy.csrrg optymalne.txt\n", argv[0]);
+        return 1;
+    }
+>>>>>>> 0432d1b107750a2d3fb18cd4a9347c37473152b6
 
         FILE *fout = fopen(argv[2], "w");
         if(!fout) {
@@ -332,8 +470,16 @@
         free(matrix);
         fclose(fout);
 
+<<<<<<< HEAD
         printf("\n\n  Zoptymalizowano polaczenia komunikacyjne poszczegolnych dzialow firmy i zapisano w pliku %s.\n ", argv[2]);
         printf(" Teraz zarzadzanie Wasza firma bedzie przebiegalo sprawniej. \n  Nie zapomnijcie przypisac osoby nadzorujacej do nowo utworzonych dzialow!\n");
         
         return 0;
     }
+=======
+    printf("\n\n  Zoptymalizowano polaczenia komunikacyjne poszczegolnych dzialow firmy i zapisano w pliku %s.\n ", argv[2]);
+    printf(" Teraz zarzadzanie Wasza firma bedzie przebiegalo sprawniej. \n  Nie zapomnijcie przypisac osoby nadzorujacej do nowo utworzonych dzialow!\n");
+    
+    return 0;
+}
+>>>>>>> 0432d1b107750a2d3fb18cd4a9347c37473152b6
