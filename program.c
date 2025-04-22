@@ -45,79 +45,68 @@ int* parse_int_array(const char *line, int *count) {
     return array;
 }
 
-void generate_random_graph(int n, double p, const char *output_filename) {
-    if (n <= 0) {
-        fprintf(stderr, "Liczba wierzcholkow (polaczen) musi byc dodatnia.\n");
+void generate_random_graph(int n, int edges, const char *output_filename) {
+    // Inicjalizacja generatora liczb losowych
+    srand(time(NULL));
+    
+    // Otwarcie pliku do zapisu
+    FILE *file = fopen(output_filename, "w");
+    if (file == NULL) {
+        printf("Nie można otworzyć pliku do zapisu.\n");
         return;
     }
-    if (p < 0.0 || p > 1.0) {
-        fprintf(stderr, "Prawdopodobienstwo musi miescic sie w przedziale [0.0, 1.0].\n");
-        return;
-    }
-
-    FILE *fout = fopen(output_filename, "w");
-    if (!fout) {
-        fprintf(stderr, "Blad: Nie mozna otworzyc pliku do zapisu: %s\n", output_filename);
-        return;
-    }
-
-    int **matrix = malloc(n * sizeof(int*));
-    if (!matrix) {
-        fprintf(stderr, "Blad alokacji pamieci dla wierszy macierzy.\n");
-        fclose(fout);
-        return;
-    }
-
+    
+    // Inicjalizacja macierzy sąsiedztwa zerami
+    int **adj_matrix = (int **)malloc(n * sizeof(int *));
     for (int i = 0; i < n; i++) {
-        matrix[i] = calloc(n, sizeof(int));
-        if (!matrix[i]) {
-            fprintf(stderr, "Blad alokacji pamieci dla kolumn macierzy (wiersz %d).\n", i);
-            for (int j = 0; j < i; j++) free(matrix[j]);
-            free(matrix);
-            fclose(fout);
-            return;
+        adj_matrix[i] = (int *)calloc(n, sizeof(int));
+    }
+    
+    // Generowanie losowych krawędzi
+    int edges_generated = 0;
+    while (edges_generated < edges) {
+        int from = rand() % n;
+        int to = rand() % n;
+        
+        // Sprawdzamy czy krawędź już nie istnieje i nie jest pętlą (from != to)
+        if (from != to && adj_matrix[from][to] == 0) {
+            adj_matrix[from][to] = 1;
+            edges_generated++;
         }
     }
-
-    srand((unsigned)time(NULL));
-
+    
+    // Zapis macierzy sąsiedztwa do pliku
+    fprintf(file, "Graf:\n");
+    fprintf(file, "Macierz sąsiedztwa:\n");
     for (int i = 0; i < n; i++) {
-        for (int j = i + 1; j < n; j++) {
-            if ((double)rand() / RAND_MAX < p) {
-                matrix[i][j] = 1;
-                matrix[j][i] = 1;
-            }
-        }
-    }
-
-    fprintf(fout, "Macierz s\xC4\x85siedztwa przedstawiajaca dzialy w firmie (rozmieszczenie przestrzenne):\n");
-    for (int i = 0; i < n; i++) {
-        fprintf(fout, "[");
+        fprintf(file, "[");
         for (int j = 0; j < n; j++) {
-            fprintf(fout, "%d.", matrix[i][j]);
-            if (j < n - 1) fprintf(fout, " ");
+            fprintf(file, "%d.", adj_matrix[i][j]);
+            if (j < n - 1) {
+                fprintf(file, " ");
+            }
         }
-        fprintf(fout, "]\n");
+        fprintf(file, "]\n");
     }
-
-    fprintf(fout, "\nLista polaczen komunikacyjnych miedzy numerami ID poszczegolnych dzialow:\n");
+    fprintf(file, "\n");
+    
+    // Zapis listy połączeń do pliku
+    fprintf(file, "Lista polaczen:\n");
     for (int i = 0; i < n; i++) {
-        for (int j = i + 1; j < n; j++) {
-            if (matrix[i][j]) {
-                fprintf(fout, "%d - %d\n", i, j);
+        for (int j = 0; j < n; j++) {
+            if (adj_matrix[i][j] == 1) {
+                fprintf(file, "%d - %d\n", i, j);
             }
         }
     }
-
+    
+    // Zamknięcie pliku i zwolnienie pamięci
+    fclose(file);
     for (int i = 0; i < n; i++) {
-        free(matrix[i]);
+        free(adj_matrix[i]);
     }
-    free(matrix);
-    fclose(fout);
-
-    printf("Graf zostal pomyslnie wygenerowany (%d wierzcholkow, p=%.2f) do pliku: %s\n", n, p, output_filename);
+    free(adj_matrix);
 }
-
 int calculate_cross_connections(int **matrix, int n, int *groups) {
     int count = 0;
     for (int i = 0; i < n; i++) {
@@ -304,75 +293,68 @@ int** read_adjacency_matrix(FILE *fin, int *n) {
     return matrix;
 }
 int main(int argc, char *argv[]) {
-    
-    printf("\n  Po wpisaniu %s w linii polecen, podaj nazwe pliku, \n  ktory zawiera polaczenia dzialow firmy w formie grafu,", argv[0]);
-    printf("\n  a nastepnie nazwe pliku wynikowego. Przyklad polecenia:\n  %s oddzialy_firmy.csrrg optymalne.txt\n", argv[0]);
-
-    if (argc == 4 && strcmp(argv[1], "generate") == 0) {
-        int n = atoi(argv[2]);
-        double p = atof(argv[3]);
-        generate_random_graph(n, p, "nowy_graf.txt");
+    // Wyświetl pomoc jeśli brak argumentów
+    if (argc == 1) {
+        printf("\nPoprawne sposoby uzycia:\n");
+        printf("1. Generowanie grafu:\n");
+        printf("   %s generate liczba_wierzcholkow liczba_krawedzi plik_wyjsciowy.txt\n", argv[0]);
+        printf("2. Optymalizacja grafu:\n");
+        printf("   %s plik_wejsciowy.csrrg plik_wyjsciowy.txt\n\n", argv[0]);
         return 0;
     }
 
-    if(argc != 3) {
-        fprintf(stderr, "\n\n\nBlad! Poprawny sposob uzycia: %s oddzialy_firmy.csrrg optymalne.txt\n", argv[0]);
-        return 1;
+    // Tryb generowania grafu
+    if (argc == 5 && strcmp(argv[1], "generate") == 0) {
+        int n = atoi(argv[2]);
+        int edges = atoi(argv[3]);
+        const char *filename = argv[4];
+        generate_random_graph(n, edges, filename);
+        return 0;
     }
+    // Tryb optymalizacji
+    else if (argc == 3) {
+        const char *input_file = argv[1];
+        const char *output_file = argv[2];
+        
+        FILE *fin = fopen(input_file, "r");
+        if (!fin) {
+            fprintf(stderr, "Blad otwarcia pliku wejsciowego: %s\n", input_file);
+            return 1;
+        }
 
-    FILE *fin = fopen(argv[1], "r");
-    if(!fin) {
-        fprintf(stderr, "Blad otwarcia pliku wejsciowego: %s\n", argv[1]);
-        return 1;
-    }
+        FILE *fout = fopen(output_file, "w");
+        if (!fout) {
+            fprintf(stderr, "Blad otwarcia pliku wyjsciowego: %s\n", output_file);
+            fclose(fin);
+            return 1;
+        }
 
-    FILE *fout = fopen(argv[2], "w");
-    if(!fout) {
-        fprintf(stderr, "Blad otwarcia pliku wyjsciowego: %s\n", argv[2]);
+        int n;
+        int **matrix = read_adjacency_matrix(fin, &n);
         fclose(fin);
-        return 1;
-    }
 
-    int n;
-    int **matrix = read_adjacency_matrix(fin, &n);
-    fclose(fin);
+        if (matrix == NULL) {
+            fprintf(stderr, "Blad odczytu macierzy sasiedztwa z pliku.\n");
+            fclose(fout);
+            return 1;
+        }
 
-    if (matrix == NULL) {
-        fprintf(stderr, "Blad odczytu macierzy sasiedztwa z pliku.\n");
+        divide_into_balanced_groups(matrix, n, fout);
+
+        for (int i = 0; i < n; i++) {
+            free(matrix[i]);
+        }
+        free(matrix);
         fclose(fout);
+
+        printf("\nOptymalizacja zakonczona. Wynik zapisano w: %s\n", output_file);
+        return 0;
+    }
+    else {
+        fprintf(stderr, "\nBlad! Niepoprawna liczba argumentow.\n");
+        fprintf(stderr, "Dostepne opcje:\n");
+        fprintf(stderr, "1. Generowanie: %s generate liczba_wierzcholkow liczba_krawedzi plik_wyjsciowy.txt\n", argv[0]);
+        fprintf(stderr, "2. Optymalizacja: %s plik_wejsciowy.csrrg plik_wyjsciowy.txt\n\n", argv[0]);
         return 1;
     }
-
-    fprintf(fout, "Graf:\n");
-    fprintf(fout, "Macierz s\xC4\x85siedztwa:\n");
-    for (int i = 0; i < n; i++) {
-        fprintf(fout, "[");
-        for (int j = 0; j < n; j++) {
-            fprintf(fout, "%d.", matrix[i][j]);
-            if(j < n - 1) fprintf(fout, " ");
-        }
-        fprintf(fout, "]\n");
-    }
-
-    fprintf(fout, "\nLista polaczen:\n");
-    for (int i = 0; i < n; i++) {
-        for (int j = i + 1; j < n; j++) {
-            if(matrix[i][j] == 1) {
-                fprintf(fout, "%d - %d\n", i, j);
-            }
-        }
-    }
-
-    divide_into_balanced_groups(matrix, n, fout);
-
-    for (int i = 0; i < n; i++) {
-        free(matrix[i]);
-    }
-    free(matrix);
-    fclose(fout);
-
-    printf("\n\n  Zoptymalizowano polaczenia komunikacyjne poszczegolnych dzialow firmy i zapisano w pliku %s.\n ", argv[2]);
-    printf(" Teraz zarzadzanie Wasza firma bedzie przebiegalo sprawniej. \n  Nie zapomnijcie przypisac osoby nadzorujacej do nowo utworzonych dzialow!\n");
-    
-    return 0;
 }
