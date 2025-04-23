@@ -46,42 +46,64 @@ int* parse_int_array(const char *line, int *count) {
 }
 
 void generate_random_graph(int n, int edges, const char *output_filename) {
-    // Inicjalizacja generatora liczb losowych
     srand(time(NULL));
     
-    // Otwarcie pliku do zapisu
     FILE *file = fopen(output_filename, "w");
     if (file == NULL) {
         printf("Nie można otworzyć pliku do zapisu.\n");
         return;
     }
     
-    // Inicjalizacja macierzy sąsiedztwa zerami
     int **adj_matrix = (int **)malloc(n * sizeof(int *));
     for (int i = 0; i < n; i++) {
         adj_matrix[i] = (int *)calloc(n, sizeof(int));
     }
     
-    // Generowanie losowych krawędzi
     int edges_generated = 0;
+    
+    // Najpierw zapewniamy, że każdy wierzchołek ma przynajmniej jedno połączenie
+    for (int i = 0; i < n; i++) {
+        int connected = 0;
+        
+        for (int j = 0; j < n; j++) {
+            if (adj_matrix[i][j] || adj_matrix[j][i]) {
+                connected = 1;
+                break;
+            }
+        }
+        
+        if (!connected) {
+            int attempts = 0;
+            while (attempts < n * 2) {
+                int to = rand() % n;
+                if (i != to && adj_matrix[i][to] == 0) {
+                    adj_matrix[i][to] = 1;
+                    edges_generated++;
+                    break;
+                }
+                attempts++;
+            }
+        }
+    }
+    
+    // Generujemy pozostałe krawędzie
     while (edges_generated < edges) {
         int from = rand() % n;
         int to = rand() % n;
         
-        // Sprawdzamy czy krawędź już nie istnieje i nie jest pętlą (from != to)
         if (from != to && adj_matrix[from][to] == 0) {
             adj_matrix[from][to] = 1;
             edges_generated++;
         }
     }
     
-    // Zapis macierzy sąsiedztwa do pliku
+    // Zapis macierzy sąsiedztwa do pliku (bez kropek)
     fprintf(file, "Graf:\n");
     fprintf(file, "Macierz sąsiedztwa:\n");
     for (int i = 0; i < n; i++) {
         fprintf(file, "[");
         for (int j = 0; j < n; j++) {
-            fprintf(file, "%d.", adj_matrix[i][j]);
+            fprintf(file, "%d", adj_matrix[i][j]); // Usunięta kropka
             if (j < n - 1) {
                 fprintf(file, " ");
             }
@@ -100,133 +122,175 @@ void generate_random_graph(int n, int edges, const char *output_filename) {
         }
     }
     
-    // Zamknięcie pliku i zwolnienie pamięci
     fclose(file);
     for (int i = 0; i < n; i++) {
         free(adj_matrix[i]);
     }
     free(adj_matrix);
 }
+int** read_adjacency_matrix(FILE *fin, int *n) {
+    char line[MAX_LINE_LENGTH];
+    
+    // Read number of vertices
+    if (!fgets(line, MAX_LINE_LENGTH, fin)) return NULL;
+    *n = atoi(line);
+    if (*n <= 0) return NULL;
+
+    // Read edges
+    if (!fgets(line, MAX_LINE_LENGTH, fin)) return NULL;
+    int edge_count;
+    int *edges = parse_int_array(line, &edge_count);
+
+    // Create empty matrix
+    int **matrix = malloc(*n * sizeof(int*));
+    if (!matrix) return NULL;
+    
+    for(int i = 0; i < *n; i++) {
+        matrix[i] = calloc(*n, sizeof(int));
+        if (!matrix[i]) {
+            for(int j = 0; j < i; j++) free(matrix[j]);
+            free(matrix);
+            return NULL;
+        }
+    }
+
+    // Populate matrix (assuming edges are pairs)
+    for(int i = 0; i < edge_count; i += 2) {
+        if(i+1 >= edge_count) break;
+        int v1 = edges[i];
+        int v2 = edges[i+1];
+        if(v1 >= 0 && v1 < *n && v2 >= 0 && v2 < *n) {
+            matrix[v1][v2] = 1;
+            matrix[v2][v1] = 1; // Undirected graph
+        }
+    }
+
+    free(edges);
+    return matrix;
+}
+
 int calculate_cross_connections(int **matrix, int n, int *groups) {
     int count = 0;
     for (int i = 0; i < n; i++) {
-        for (int j = i + 1; j < n; j++) {
+        for (int j = 0; j < n; j++) {
             if (matrix[i][j] && groups[i] != groups[j]) {
                 count++;
             }
         }
     }
-    return count;
+    return count / 2; // Each connection counted twice
 }
+
 void divide_into_balanced_groups(int **matrix, int n, FILE *fout) {
-    if (n < 3) {
-        fprintf(fout, "Za mało wierzchołków (min. 3).\n");
+    int *groups = malloc(n * sizeof(int));
+    int *best_groups = malloc(n * sizeof(int));
+    if (!groups || !best_groups) {
+        fprintf(stderr, "Błąd alokacji pamięci\n");
         return;
     }
 
-    int *best_groups = malloc(n * sizeof(int));
-    int min_cross = INT_MAX;
-    
-    // Parametry algorytmu
-    const int max_attempts = 10;  // Liczba prób z różnymi inicjalizacjami
-    const double initial_temp = 10.0;
-    const double cooling_rate = 0.95;
-    
-    for (int attempt = 0; attempt < max_attempts; attempt++) {
-        int *groups = malloc(n * sizeof(int));
+    // Inicjalizacja z lepszym balansem
+    srand(time(NULL));
+    for (int i = 0; i < n; i++) {
+        groups[i] = i % 3;  // Początkowo równomierny podział
+    }
+
+    int min_cross = calculate_cross_connections(matrix, n, groups);
+    memcpy(best_groups, groups, n * sizeof(int));
+
+    int max_iter = 1000;  // Zabezpieczenie przed nieskończoną pętlą
+    float balance_weight = 0.1;  // Waga dla kryterium balansu
+
+    for (int iter = 0; iter < max_iter; iter++) {
+        int improved = 0;
         
-        // Inicjalizacja - lepsze podejście niż proste modulo
-        if (attempt == 0) {
-            // Pierwsza próba - równomierny podział
-            for (int i = 0; i < n; i++) groups[i] = i % 3;
-        } else {
-            // Kolejne próby - losowa inicjalizacja z zachowaniem równowagi
-            int target_size = n / 3;
-            for (int i = 0; i < n; i++) groups[i] = -1;
+        for (int v = 0; v < n; v++) {
+            int current_group = groups[v];
+            int best_group = current_group;
+            int current_score = min_cross;
+            
+            // Oblicz aktualne rozmiary grup
+            int sizes[3] = {0};
+            for (int i = 0; i < n; i++) sizes[groups[i]]++;
             
             for (int g = 0; g < 3; g++) {
-                int count = 0;
-                while (count < target_size) {
-                    int idx = rand() % n;
-                    if (groups[idx] == -1) {
-                        groups[idx] = g;
-                        count++;
-                    }
-                }
-            }
-            
-            // Przypisz pozostałe wierzchołki
-            for (int i = 0; i < n; i++) {
-                if (groups[i] == -1) groups[i] = rand() % 3;
-            }
-        }
-        
-        int current_cross = calculate_cross_connections(matrix, n, groups);
-        
-        // Symulowane wyżarzanie
-        double temp = initial_temp;
-        while (temp > 0.1) {
-            int improved = 0;
-            
-            for (int i = 0; i < n; i++) {
-                int original_group = groups[i];
+                if (g == current_group) continue;
                 
-                // Sprawdź wszystkie możliwe przemieszczenia
-                for (int g = 0; g < 3; g++) {
-                    if (g == original_group) continue;
-                    
-                    // Sprawdź ograniczenia równowagi
-                    int new_group_sizes[3] = {0};
-                    for (int j = 0; j < n; j++) {
-                        int group = (j == i) ? g : groups[j];
-                        new_group_sizes[group]++;
-                    }
-                    
-                    int max_size = (n + 2) / 3;  // ceil(n/3)
-                    int min_size = (n - 1) / 3;   // floor(n/3)
-                    
-                    if (new_group_sizes[g] > max_size || new_group_sizes[original_group] < min_size) {
-                        continue;
-                    }
-                    
-                    groups[i] = g;
-                    int new_cross = calculate_cross_connections(matrix, n, groups);
-                    
-                    // Kryterium akceptacji
-                    if (new_cross < current_cross || 
-                        (temp > 0 && exp((current_cross - new_cross)/temp) > (double)rand()/RAND_MAX)) {
-                        
-                        current_cross = new_cross;
-                        improved = 1;
-                        
-                        if (current_cross < min_cross) {
-                            min_cross = current_cross;
-                            memcpy(best_groups, groups, n * sizeof(int));
-                        }
-                    } else {
-                        groups[i] = original_group;
-                    }
+                // Tymczasowe przeniesienie
+                groups[v] = g;
+                int new_cross = calculate_cross_connections(matrix, n, groups);
+                
+                // Oblicz nowe rozmiary grup
+                int new_sizes[3] = {0};
+                for (int i = 0; i < n; i++) new_sizes[groups[i]]++;
+                
+                // Oblicz "koszt" nierównowagi
+                int balance_cost = abs(new_sizes[0] - n/3) + 
+                                 abs(new_sizes[1] - n/3) + 
+                                 abs(new_sizes[2] - n/3);
+                
+                // Połączone kryterium (połączenia + balans)
+                int new_score = new_cross + balance_weight * balance_cost;
+                
+                if (new_score < current_score) {
+                    current_score = new_score;
+                    best_group = g;
                 }
             }
             
-            // Schładzanie
-            temp *= cooling_rate;
-            
-            if (!improved && temp < 0.5) break;
+            if (best_group != current_group) {
+                groups[v] = best_group;
+                min_cross = calculate_cross_connections(matrix, n, groups);
+                improved = 1;
+                
+                // Zapamiętaj najlepszy podział
+                if (min_cross < calculate_cross_connections(matrix, n, best_groups)) {
+                    memcpy(best_groups, groups, n * sizeof(int));
+                }
+            } else {
+                groups[v] = current_group;
+            }
         }
         
-        free(groups);
+        if (!improved) break;
     }
-    
-    // Wynik
-    fprintf(fout, "\nOptymalny podział na 3 grupy:\n");
-    fprintf(fout, "Minimalna liczba połączeń między grupami: %d\n", min_cross);
-    
+
+    // Oblicz końcowe rozmiary grup
     int counts[3] = {0};
     for (int i = 0; i < n; i++) counts[best_groups[i]]++;
-    
+
+    // Jeśli któraś grupa jest pusta, popraw to
+    if (counts[0] == 0 || counts[1] == 0 || counts[2] == 0) {
+        // Prosta heurystyka naprawcza
+        for (int g = 0; g < 3; g++) {
+            if (counts[g] == 0) {
+                // Znajdź największą grupę i przenieś jeden wierzchołek
+                int max_g = (counts[0] > counts[1]) ? 0 : 1;
+                max_g = (counts[max_g] > counts[2]) ? max_g : 2;
+                
+                for (int i = 0; i < n; i++) {
+                    if (best_groups[i] == max_g) {
+                        best_groups[i] = g;
+                        counts[max_g]--;
+                        counts[g]++;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    // Oblicz ostateczną liczbę połączeń
+    min_cross = calculate_cross_connections(matrix, n, best_groups);
+
+    // Wypisz wyniki
+    fprintf(fout, "\nOptymalny podział na 3 grupy:\n");
+    fprintf(fout, "Minimalna liczba połączeń między grupami: %d\n", min_cross);
+
+    counts[0] = counts[1] = counts[2] = 0;
+    for (int i = 0; i < n; i++) counts[best_groups[i]]++;
     fprintf(fout, "Liczebność grup: %d, %d, %d\n", counts[0], counts[1], counts[2]);
-    
+
     for (int g = 0; g < 3; g++) {
         fprintf(fout, "Grupa %d: ", g);
         for (int i = 0; i < n; i++) {
@@ -234,63 +298,9 @@ void divide_into_balanced_groups(int **matrix, int n, FILE *fout) {
         }
         fprintf(fout, "\n");
     }
-    
-    // Dodatkowa analiza
-    fprintf(fout, "\nAnaliza połączeń:\n");
-    for (int g1 = 0; g1 < 3; g1++) {
-        for (int g2 = g1+1; g2 < 3; g2++) {
-            int connections = 0;
-            for (int i = 0; i < n; i++) {
-                if (best_groups[i] != g1) continue;
-                for (int j = 0; j < n; j++) {
-                    if (best_groups[j] == g2 && matrix[i][j]) {
-                        connections++;
-                    }
-                }
-            }
-            fprintf(fout, "Połączenia między grupą %d a %d: %d\n", g1, g2, connections);
-        }
-    }
-    
+
+    free(groups);
     free(best_groups);
-}
-int** read_adjacency_matrix(FILE *fin, int *n) {
-    // Skip first line (50)
-    char line[MAX_LINE_LENGTH];
-    fgets(line, MAX_LINE_LENGTH, fin);
-    
-    // Read edges list
-    fgets(line, MAX_LINE_LENGTH, fin);
-    int edge_count;
-    int *edges = parse_int_array(line, &edge_count);
-    
-    // Read indices
-    fgets(line, MAX_LINE_LENGTH, fin);
-    int index_count;
-    int *indices = parse_int_array(line, &index_count);
-    
-    // Determine number of vertices (n)
-    *n = indices[index_count-1] / 2; // Rough estimate
-    
-    // Create empty matrix
-    int **matrix = malloc(*n * sizeof(int*));
-    for(int i = 0; i < *n; i++) {
-        matrix[i] = calloc(*n, sizeof(int));
-    }
-    
-    // Populate matrix from edges
-    for(int i = 0; i < edge_count; i++) {
-        int v1 = edges[i] / *n;
-        int v2 = edges[i] % *n;
-        if(v1 < *n && v2 < *n) {
-            matrix[v1][v2] = 1;
-            matrix[v2][v1] = 1;
-        }
-    }
-    
-    free(edges);
-    free(indices);
-    return matrix;
 }
 int main(int argc, char *argv[]) {
     // Wyświetl pomoc jeśli brak argumentów
@@ -300,6 +310,7 @@ int main(int argc, char *argv[]) {
         printf("   %s generate liczba_wierzcholkow liczba_krawedzi plik_wyjsciowy.txt\n", argv[0]);
         printf("2. Optymalizacja grafu:\n");
         printf("   %s plik_wejsciowy.csrrg plik_wyjsciowy.txt\n\n", argv[0]);
+
         return 0;
     }
 
@@ -331,7 +342,10 @@ int main(int argc, char *argv[]) {
 
         int n;
         int **matrix = read_adjacency_matrix(fin, &n);
+
         fclose(fin);
+
+
 
         if (matrix == NULL) {
             fprintf(stderr, "Blad odczytu macierzy sasiedztwa z pliku.\n");
@@ -341,14 +355,24 @@ int main(int argc, char *argv[]) {
 
         divide_into_balanced_groups(matrix, n, fout);
 
+
+
+
+
         for (int i = 0; i < n; i++) {
             free(matrix[i]);
+
         }
         free(matrix);
         fclose(fout);
 
         printf("\nOptymalizacja zakonczona. Wynik zapisano w: %s\n", output_file);
         return 0;
+
+
+
+
+
     }
     else {
         fprintf(stderr, "\nBlad! Niepoprawna liczba argumentow.\n");
@@ -357,4 +381,11 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "2. Optymalizacja: %s plik_wejsciowy.csrrg plik_wyjsciowy.txt\n\n", argv[0]);
         return 1;
     }
+
+
+
+
+
+
+
 }
