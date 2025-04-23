@@ -45,89 +45,7 @@ int* parse_int_array(const char *line, int *count) {
     return array;
 }
 
-void generate_random_graph(int n, int edges, const char *output_filename) {
-    srand(time(NULL));
-    
-    FILE *file = fopen(output_filename, "w");
-    if (file == NULL) {
-        printf("Nie można otworzyć pliku do zapisu.\n");
-        return;
-    }
-    
-    int **adj_matrix = (int **)malloc(n * sizeof(int *));
-    for (int i = 0; i < n; i++) {
-        adj_matrix[i] = (int *)calloc(n, sizeof(int));
-    }
-    
-    int edges_generated = 0;
-    
-    // Najpierw zapewniamy, że każdy wierzchołek ma przynajmniej jedno połączenie
-    for (int i = 0; i < n; i++) {
-        int connected = 0;
-        
-        for (int j = 0; j < n; j++) {
-            if (adj_matrix[i][j] || adj_matrix[j][i]) {
-                connected = 1;
-                break;
-            }
-        }
-        
-        if (!connected) {
-            int attempts = 0;
-            while (attempts < n * 2) {
-                int to = rand() % n;
-                if (i != to && adj_matrix[i][to] == 0) {
-                    adj_matrix[i][to] = 1;
-                    edges_generated++;
-                    break;
-                }
-                attempts++;
-            }
-        }
-    }
-    
-    // Generujemy pozostałe krawędzie
-    while (edges_generated < edges) {
-        int from = rand() % n;
-        int to = rand() % n;
-        
-        if (from != to && adj_matrix[from][to] == 0) {
-            adj_matrix[from][to] = 1;
-            edges_generated++;
-        }
-    }
-    
-    // Zapis macierzy sąsiedztwa do pliku (bez kropek)
-    fprintf(file, "Graf:\n");
-    fprintf(file, "Macierz sąsiedztwa:\n");
-    for (int i = 0; i < n; i++) {
-        fprintf(file, "[");
-        for (int j = 0; j < n; j++) {
-            fprintf(file, "%d", adj_matrix[i][j]); // Usunięta kropka
-            if (j < n - 1) {
-                fprintf(file, " ");
-            }
-        }
-        fprintf(file, "]\n");
-    }
-    fprintf(file, "\n");
-    
-    // Zapis listy połączeń do pliku
-    fprintf(file, "Lista polaczen:\n");
-    for (int i = 0; i < n; i++) {
-        for (int j = 0; j < n; j++) {
-            if (adj_matrix[i][j] == 1) {
-                fprintf(file, "%d - %d\n", i, j);
-            }
-        }
-    }
-    
-    fclose(file);
-    for (int i = 0; i < n; i++) {
-        free(adj_matrix[i]);
-    }
-    free(adj_matrix);
-}
+
 int** read_adjacency_matrix(FILE *fin, int *n) {
     char line[MAX_LINE_LENGTH];
     
@@ -302,6 +220,7 @@ void divide_into_balanced_groups(int **matrix, int n, FILE *fout) {
     free(groups);
     free(best_groups);
 }
+
 int main(int argc, char *argv[]) {
     // Wyświetl pomoc jeśli brak argumentów
     if (argc == 1) {

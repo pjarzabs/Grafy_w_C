@@ -1,0 +1,43 @@
+Graf:
+Macierz sąsiedztwa:
+[0 0 0 0 1 0 1 0 0 0]
+[0 0 0 0 0 0 0 0 1 0]
+[0 0 0 0 0 0 1 0 0 1]
+[0 0 0 0 0 0 1 0 0 0]
+[1 1 0 0 0 1 0 1 0 1]
+[0 1 0 0 0 0 0 0 1 0]
+[1 0 0 0 0 0 0 0 0 1]
+[0 0 0 1 0 0 0 0 0 0]
+[0 0 0 1 1 0 0 0 0 0]
+[0 0 0 1 0 1 0 0 0 0]
+
+Lista polaczen:
+0 - 4
+0 - 6
+1 - 8
+2 - 6
+2 - 9
+3 - 6
+4 - 0
+4 - 1
+4 - 5
+4 - 7
+4 - 9
+5 - 1
+5 - 8
+6 - 0
+6 - 9
+7 - 3
+8 - 3
+8 - 4
+9 - 3
+9 - 5
+
+Podzial na grupy:
+
+Optymalny podział na 3 grupy:
+Minimalna liczba połączeń między grupami: 4
+Liczebność grup: 6, 1, 3
+Grupa 0: 2 3 4 6 7 9 
+Grupa 1: 0 
+Grupa 2: 1 5 8 
