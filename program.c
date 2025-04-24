@@ -116,7 +116,7 @@ void divide_into_balanced_groups(int **matrix, int n, FILE *fout) {
     int min_cross = calculate_cross_connections(matrix, n, groups);
     memcpy(best_groups, groups, n * sizeof(int));
 
-    int max_iter = 1000;  // Zabezpieczenie przed nieskończoną pętlą
+    int max_iter = 100; 
     float balance_weight = 0.1;  // Waga dla kryterium balansu
 
     for (int iter = 0; iter < max_iter; iter++) {
@@ -127,27 +127,23 @@ void divide_into_balanced_groups(int **matrix, int n, FILE *fout) {
             int best_group = current_group;
             int current_score = min_cross;
             
-            // Oblicz aktualne rozmiary grup
+  
             int sizes[3] = {0};
             for (int i = 0; i < n; i++) sizes[groups[i]]++;
             
             for (int g = 0; g < 3; g++) {
                 if (g == current_group) continue;
                 
-                // Tymczasowe przeniesienie
                 groups[v] = g;
                 int new_cross = calculate_cross_connections(matrix, n, groups);
                 
-                // Oblicz nowe rozmiary grup
                 int new_sizes[3] = {0};
                 for (int i = 0; i < n; i++) new_sizes[groups[i]]++;
                 
-                // Oblicz "koszt" nierównowagi
                 int balance_cost = abs(new_sizes[0] - n/3) + 
                                  abs(new_sizes[1] - n/3) + 
                                  abs(new_sizes[2] - n/3);
                 
-                // Połączone kryterium (połączenia + balans)
                 int new_score = new_cross + balance_weight * balance_cost;
                 
                 if (new_score < current_score) {
@@ -161,7 +157,6 @@ void divide_into_balanced_groups(int **matrix, int n, FILE *fout) {
                 min_cross = calculate_cross_connections(matrix, n, groups);
                 improved = 1;
                 
-                // Zapamiętaj najlepszy podział
                 if (min_cross < calculate_cross_connections(matrix, n, best_groups)) {
                     memcpy(best_groups, groups, n * sizeof(int));
                 }
@@ -173,16 +168,12 @@ void divide_into_balanced_groups(int **matrix, int n, FILE *fout) {
         if (!improved) break;
     }
 
-    // Oblicz końcowe rozmiary grup
     int counts[3] = {0};
     for (int i = 0; i < n; i++) counts[best_groups[i]]++;
 
-    // Jeśli któraś grupa jest pusta, popraw to
     if (counts[0] == 0 || counts[1] == 0 || counts[2] == 0) {
-        // Prosta heurystyka naprawcza
         for (int g = 0; g < 3; g++) {
             if (counts[g] == 0) {
-                // Znajdź największą grupę i przenieś jeden wierzchołek
                 int max_g = (counts[0] > counts[1]) ? 0 : 1;
                 max_g = (counts[max_g] > counts[2]) ? max_g : 2;
                 
@@ -198,10 +189,8 @@ void divide_into_balanced_groups(int **matrix, int n, FILE *fout) {
         }
     }
 
-    // Oblicz ostateczną liczbę połączeń
     min_cross = calculate_cross_connections(matrix, n, best_groups);
 
-    // Wypisz wyniki
     fprintf(fout, "\nOptymalny podział na 3 grupy:\n");
     fprintf(fout, "Minimalna liczba połączeń między grupami: %d\n", min_cross);
 
@@ -344,7 +333,25 @@ int main(int argc, char *argv[]) {
 
         int n;
         int **matrix = read_adjacency_matrix(fin, &n);
-
+        fprintf(fout, "Macierz sąsiedztwa:\n");
+        for (int i = 0; i < n; i++) {
+            fprintf(fout, "[");
+            for (int j = 0; j < n; j++) {
+                fprintf(fout, "%d", matrix[i][j]);
+                if (j < n - 1) fprintf(fout, " ");
+            }
+            fprintf(fout, "]\n");
+        }
+        
+        fprintf(fout, "\nLista połączeń:\n");
+        for (int i = 0; i < n; i++) {
+            for (int j = i + 1; j < n; j++) {
+                if (matrix[i][j]) {
+                    fprintf(fout, "%d - %d\n", i, j);
+                }
+            }
+        }
+        
         fclose(fin);
 
 
@@ -370,11 +377,6 @@ int main(int argc, char *argv[]) {
 
         printf("\nOptymalizacja zakonczona. Wynik zapisano w: %s\n", output_file);
         return 0;
-
-
-
-
-
     }
     else {
         fprintf(stderr, "\nBlad! Niepoprawna liczba argumentow.\n");
@@ -383,11 +385,4 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "2. Optymalizacja: %s plik_wejsciowy.csrrg plik_wyjsciowy.txt\n\n", argv[0]);
         return 1;
     }
-
-
-
-
-
-
-
 }
